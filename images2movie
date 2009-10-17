@@ -1,0 +1,84 @@
+MOVIE_FILENAME_EXTENSION=.mov;
+MOVIE_FILENAME=timelapse;
+TEMP_SERIES_DIR=/tmp/timelapse_series;
+SRC_DIR=$1;
+FPS=$2;
+
+
+#
+# Owing to ffmpeg requiring a file format like 001.jpg 089.jpg we need to copy all the files we have to this format in a tempoary location
+#
+
+serialise_files(){
+    COUNTER=0;
+	if [ ! -d $TEMP_SERIES_DIR ]
+    	then
+		echo 'Making temp directory for images '$TEMP_SERIES_DIR;
+		mkdir $TEMP_SERIES_DIR;
+	fi
+    for SRC_FILE in `find $SRC_DIR -iregex '.*jp[e]*g'` ;
+        do
+            #Write the filename to be friendly with ffmpeg's odd filename input
+            FILENAME=`printf '%05d.jpg' $COUNTER`
+            cp $SRC_FILE $TEMP_SERIES_DIR'/'$FILENAME;
+            let COUNTER=COUNTER+1;
+        done
+}
+
+
+#
+# Remove all the tempoarily generated files needed for ffmpeg
+#
+
+remove_serialised_files(){
+    echo "Deleting temp directory" $TEMP_SERIES_DIR;
+    rm -rf $TEMP_SERIES_DIR;
+}
+
+
+#
+# Check if the movie already exists, if so append a date to it to disambiguate.
+#
+
+check_movie_exists(){
+	if [ -f $MOVIE_FILENAME$MOVIE_FILENAME_EXTENSION ]
+		then
+			MOVIE_FILENAME=$MOVIE_FILENAME'_'`date +"%m_%d_%Y-%H_%S"`;
+	fi
+}
+
+
+#
+# Make the movie from a list of correctly formatted filenames
+#
+
+make_movie(){
+    serialise_files
+	check_movie_exists;
+    echo "Trying to make movie" $MOVIE_FILENAME$MOVIE_FILENAME_EXTENSION;
+	if [ ! $FPS ]
+		then
+			FPS=30;
+	fi
+	if [ -f $TEMP_SERIES_DIR/00000.jpg ]
+		then
+    		nice ffmpeg -r $FPS -s hd720 -vcodec copy -i $TEMP_SERIES_DIR/%05d.jpg $MOVIE_FILENAME$MOVIE_FILENAME_EXTENSION;
+	else
+		echo 'No images found to process'
+	fi
+    remove_serialised_files
+}          
+
+#
+# Only if we have a working source directory run the make_movie function
+#
+
+if [ -d $SRC_DIR ]
+    then
+        make_movie
+		echo '--------------------------------------';
+		echo 'Movie generated: '$MOVIE_FILENAME$MOVIE_FILENAME_EXTENSION
+		echo '--------------------------------------';
+else
+	echo 'You have not specified a valid directory to work from.'
+fi
